@@ -1,5 +1,5 @@
 /**
- * lampa-prowlarr-category-fix plugin v1.0.0
+ * lampa-prowlarr-category-fix plugin v1.0.1
  * Keeps category-less indexers such as RuTor in Prowlarr search results.
  */
 
@@ -8,6 +8,7 @@
 
     var COMPONENT = 'prowlarr_category_fix';
     var MODE_FIELD = COMPONENT + '_mode';
+    var MINIMUM_TIMEOUT = 1000 * 30;
 
     function removeQueryParameter(url, parameterName) {
         var hash = '';
@@ -68,21 +69,41 @@
     }
 
     function interceptRequest(event) {
-        if (!event || !event.params || typeof event.params.url !== 'string') return;
-        if (Lampa.Storage.field('parser_torrent_type') !== 'prowlarr') return;
+        try {
+            if (!event || !event.params || typeof event.params.url !== 'string') return;
+            if (Lampa.Storage.field('parser_torrent_type') !== 'prowlarr') return;
 
-        var mode = Lampa.Storage.get(MODE_FIELD, 'always');
-        if (mode === 'off') return;
-        if (mode === 'global' && !isGlobalSearch()) return;
-        if (!isConfiguredProwlarrSearch(event.params.url)) return;
+            var mode = Lampa.Storage.get(MODE_FIELD, 'always');
+            if (mode === 'off') return;
+            if (mode === 'global' && !isGlobalSearch()) return;
+            if (!isConfiguredProwlarrSearch(event.params.url)) return;
 
-        var fixedUrl = removeQueryParameter(event.params.url, 'categories');
-        if (fixedUrl === event.params.url) return;
+            var fixedUrl = removeQueryParameter(event.params.url, 'categories');
+            if (fixedUrl === event.params.url) return;
 
-        event.params.url = fixedUrl;
+            event.params.url = fixedUrl;
 
-        // Do not log the full URL: it contains the Prowlarr API key.
-        console.log('Prowlarr Category Fix', 'Removed categories from search request');
+            // Category-less searches query more indexers and can exceed
+            // Lampa's default 15 second parser timeout.
+            event.params.timeout = Math.max(
+                Number(event.params.timeout) || 0,
+                MINIMUM_TIMEOUT
+            );
+
+            // Do not log the full URL: it contains the Prowlarr API key.
+            console.log(
+                'Prowlarr Category Fix',
+                'Removed categories; request timeout is at least 30 seconds'
+            );
+        } catch (error) {
+            // A compatibility issue in the plugin must not break the original
+            // Prowlarr request.
+            console.error(
+                'Prowlarr Category Fix',
+                'Could not process request:',
+                error && error.message ? error.message : error
+            );
+        }
     }
 
     function addSettings(manifest) {
@@ -116,7 +137,7 @@
 
         var manifest = {
             type: 'other',
-            version: '1.0.0',
+            version: '1.0.1',
             name: 'Prowlarr Category Fix',
             description: 'Возвращает результаты RuTor в поиске через Prowlarr.',
             component: COMPONENT

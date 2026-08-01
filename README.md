@@ -10,7 +10,7 @@ This is a known Lampa limitation described in [yumata/lampa#159](https://github.
 
 ## Solution
 
-The plugin intercepts configured Prowlarr search requests inside Lampa and removes only the `categories` query parameter. It does not store, modify, or log the Prowlarr API key.
+The plugin intercepts configured Prowlarr search requests inside Lampa and removes only the `categories` query parameter. It also gives these broader searches at least 30 seconds instead of Lampa's 15-second default, because Prowlarr may need to query more indexers. It does not store, modify, or log the Prowlarr API key.
 
 Available modes:
 
@@ -39,7 +39,7 @@ https://eudu.github.io/lampa-prowlarr-category-fix/prowlarr_category_fix.js
 
 ## How it works
 
-The plugin listens to Lampa's `request_before` event. For `/api/v1/search` requests sent to the primary or secondary configured Prowlarr URL, it removes `categories` before Lampa sends the request. Other requests and Jackett searches are not changed.
+The plugin listens to Lampa's `request_before` event. For `/api/v1/search` requests sent to the primary or secondary configured Prowlarr URL, it removes `categories` and sets a 30-second minimum request timeout before Lampa sends the request. Other requests and Jackett searches are not changed.
 
 ## Security
 
