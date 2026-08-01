@@ -1,5 +1,5 @@
 /**
- * lampa-prowlarr-category-fix plugin v1.0.1
+ * lampa-prowlarr-category-fix plugin v1.0.2
  * Keeps category-less indexers such as RuTor in Prowlarr search results.
  */
 
@@ -9,6 +9,13 @@
     var COMPONENT = 'prowlarr_category_fix';
     var MODE_FIELD = COMPONENT + '_mode';
     var MINIMUM_TIMEOUT = 1000 * 30;
+    var SETTINGS_ICON = [
+        '<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">',
+        '<circle cx="16" cy="16" r="10" stroke="white" stroke-width="3"/>',
+        '<path d="M23.5 23.5L32 32" stroke="white" stroke-width="3" stroke-linecap="round"/>',
+        '<path d="M10 16H22M16 10V22" stroke="white" stroke-width="2" stroke-linecap="round"/>',
+        '</svg>'
+    ].join('');
 
     function removeQueryParameter(url, parameterName) {
         var hash = '';
@@ -109,6 +116,7 @@
     function addSettings(manifest) {
         Lampa.SettingsApi.addComponent({
             component: manifest.component,
+            icon: SETTINGS_ICON,
             name: manifest.name
         });
 
@@ -137,7 +145,7 @@
 
         var manifest = {
             type: 'other',
-            version: '1.0.1',
+            version: '1.0.2',
             name: 'Prowlarr Category Fix',
             description: 'Возвращает результаты RuTor в поиске через Prowlarr.',
             component: COMPONENT
