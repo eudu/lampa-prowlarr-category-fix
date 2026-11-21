@@ -1,6 +1,7 @@
 /**
- * lampa-prowlarr-category-fix plugin v1.0.2
- * Keeps category-less indexers such as RuTor in Prowlarr search results.
+ * lampa-prowlarr-category-fix plugin v1.1.0
+ * Keeps category-less indexers such as RuTor in Prowlarr search results
+ * and hides results whose title does not contain the searched title.
  */
 
 (function () {
@@ -8,6 +9,7 @@
 
     var COMPONENT = 'prowlarr_category_fix';
     var MODE_FIELD = COMPONENT + '_mode';
+    var TITLE_FILTER_FIELD = COMPONENT + '_title_filter';
     var MINIMUM_TIMEOUT = 1000 * 30;
     var SETTINGS_ICON = [
         '<svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">',
@@ -75,15 +77,103 @@
         return Boolean(activity && activity.global);
     }
 
+    // the latest torrents activity: its search_one and search_two are the
+    // card titles, Lampa sends it before the component starts the request
+    var torrentsActivity = null;
+
+    function rememberActivity(event) {
+        if (event && event.type === 'init' && event.component === 'torrents') {
+            torrentsActivity = event.object || null;
+        }
+    }
+
+    function getQueryParameter(url, parameterName) {
+        var match = url.match(new RegExp('[?&]' + parameterName + '=([^&#]*)'));
+        if (!match) return '';
+
+        try {
+            return decodeURIComponent(match[1].replace(/\+/g, ' '));
+        } catch (error) {
+            return match[1];
+        }
+    }
+
+    // lower case, "ё" as "е", punctuation as spaces; letters of any script stay
+    function normalizeTitle(text) {
+        return ' ' + String(text || '')
+            .toLowerCase()
+            .replace(/ё/g, 'е')
+            .replace(/[\s.,:;!?'"`«»()[\]{}\/\\|_+*&#@%^~<>=\-]+/g, ' ')
+            .trim() + ' ';
+    }
+
+    function searchPhrases(query) {
+        var texts = [query, query.replace(/\s+(19|20)\d\d$/, '')];
+        var activity = torrentsActivity;
+
+        if (activity && activity.search === query && !activity.clarification) {
+            texts.push(activity.search_one, activity.search_two);
+        }
+
+        return texts
+            .map(normalizeTitle)
+            .filter(function (phrase, index, all) {
+                return phrase.trim() && all.indexOf(phrase) === index;
+            });
+    }
+
+    function filterByTitle(results, phrases) {
+        if (!Array.isArray(results) || !phrases.length) return results;
+
+        var matched = results.filter(function (result) {
+            var title = normalizeTitle(result && result.title);
+
+            return phrases.some(function (phrase) {
+                return title.indexOf(phrase) >= 0;
+            });
+        });
+
+        // a different spelling on the tracker must not empty the list
+        return matched.length ? matched : results;
+    }
+
+    function addTitleFilter(params) {
+        if (Lampa.Storage.get(TITLE_FILTER_FIELD, 'on') === 'off') return;
+        if (typeof params.complite !== 'function') return;
+
+        var phrases = searchPhrases(getQueryParameter(params.url, 'query'));
+        if (!phrases.length) return;
+
+        var complite = params.complite;
+
+        params.complite = function (data) {
+            var filtered = data;
+
+            try {
+                filtered = filterByTitle(data, phrases);
+            } catch (error) {
+                console.error(
+                    'Prowlarr Category Fix',
+                    'Could not filter results:',
+                    error && error.message ? error.message : error
+                );
+            }
+
+            return complite.call(this, filtered);
+        };
+    }
+
     function interceptRequest(event) {
         try {
             if (!event || !event.params || typeof event.params.url !== 'string') return;
             if (Lampa.Storage.field('parser_torrent_type') !== 'prowlarr') return;
+            if (!isConfiguredProwlarrSearch(event.params.url)) return;
+
+            addTitleFilter(event.params);
 
             var mode = Lampa.Storage.get(MODE_FIELD, 'always');
             if (mode === 'off') return;
             if (mode === 'global' && !isGlobalSearch()) return;
-            if (!isConfiguredProwlarrSearch(event.params.url)) return;
 
             var fixedUrl = removeQueryParameter(event.params.url, 'categories');
             if (fixedUrl === event.params.url) return;
@@ -137,6 +227,23 @@
                 description: 'Позволяет Prowlarr возвращать результаты RuTor, помеченные категорией Other.'
             }
         });
+
+        Lampa.SettingsApi.addParam({
+            component: manifest.component,
+            param: {
+                name: TITLE_FILTER_FIELD,
+                type: 'select',
+                default: 'on',
+                values: {
+                    on: 'Включено',
+                    off: 'Выключено'
+                }
+            },
+            field: {
+                name: 'Фильтр по названию',
+                description: 'Скрывает раздачи, в заголовке которых нет названия из карточки или текста поиска. Если не совпало ничего, показывает всё.'
+            }
+        });
     }
 
     function startPlugin() {
@@ -145,13 +252,14 @@
 
         var manifest = {
             type: 'other',
-            version: '1.0.2',
+            version: '1.1.0',
             name: 'Prowlarr Category Fix',
-            description: 'Возвращает результаты RuTor в поиске через Prowlarr.',
+            description: 'Возвращает результаты RuTor и убирает лишние раздачи в поиске через Prowlarr.',
             component: COMPONENT
         };
 
         Lampa.Manifest.plugins = manifest;
+        Lampa.Listener.follow('activity', rememberActivity);
         Lampa.Listener.follow('request_before', interceptRequest);
         addSettings(manifest);
 

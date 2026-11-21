@@ -12,6 +12,8 @@ This is a known Lampa limitation described in [yumata/lampa#159](https://github.
 
 The plugin intercepts configured Prowlarr search requests inside Lampa and removes only the `categories` query parameter. It also gives these broader searches at least 30 seconds instead of Lampa's 15-second default, because Prowlarr may need to query more indexers. It does not store, modify, or log the Prowlarr API key.
 
+Removing categories also brings in releases that only share a word or a number with the title: a search for the series "12 12 12" returns hundreds of "E1-12 of 12" releases and games. The title filter hides results whose title does not contain the searched title as a whole phrase.
+
 Available modes:
 
 - **All searches** — default and recommended for RuTor.
@@ -35,11 +37,19 @@ https://eudu.github.io/lampa-prowlarr-category-fix/prowlarr_category_fix.js
 1. Open **Lampa → Settings → Extensions → Add plugin**.
 2. Paste one of the URLs above.
 3. Restart Lampa.
-4. Open **Settings → Prowlarr Category Fix** to select a mode.
+4. Open **Settings → Prowlarr Category Fix** to select a mode and switch the title filter.
 
 ## How it works
 
 The plugin listens to Lampa's `request_before` event. For `/api/v1/search` requests sent to the primary or secondary configured Prowlarr URL, it removes `categories` and sets a 30-second minimum request timeout before Lampa sends the request. Other requests and Jackett searches are not changed.
+
+The title filter wraps the result callback of the same requests. A result stays when its title contains one of the phrases: the search query, the query without a trailing year, or the card title and original title of the torrents screen. Case, "ё" and punctuation are ignored, so `Yolki.Palki.S01` matches "Ёлки палки". A clarification search compares only with the typed text. When nothing matches, all results are shown, so a release spelled differently on the tracker is not lost.
+
+## Tests
+
+```sh
+node --test
+```
 
 ## Security
 
